@@ -42,7 +42,7 @@ resource "aws_security_group" "sg_gw" {
         cidr_blocks = ["0.0.0.0/0"]
     }
     tags = {
-        Name = concat(local.nameprefix, "sg_gw")
+        Name = "${local.nameprefix}sg_gw"
     }
     lifecycle {
         create_before_destroy = true
@@ -64,7 +64,7 @@ resource "aws_security_group" "sg_gh" {
     cidr_blocks = ["0.0.0.0/0"]
    }
    tags = {
-     name = concat(local.nameprefix, "sg_gh")
+     name = "${local.nameprefix}sg_gh"
    }
    lifecycle {
      create_before_destroy = true
@@ -76,7 +76,7 @@ resource "aws_instance" "gw" {
     instance_type = local.gw_instance_type
     key_name = "cdjkeeaws"
     tags = {
-        name = concat(local.nameprefix, "ec2_gw")
+        name = "${local.nameprefix}ec2_gw"
     }
 
     # tags = merge(local.common_tags,{name = "gw"})
@@ -87,6 +87,6 @@ resource "aws_instance" "gh" {
     instance_type = local.gh_instance_type
     key_name = "cdjkeeaws"
     tags = {
-        name = concat(local.nameprefix, "ec2_gh")
+        name = "${local.nameprefix}ec2_gh"
     }
 }
