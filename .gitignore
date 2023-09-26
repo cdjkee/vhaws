@@ -1,0 +1,4 @@
+*.log
+*.hcl
+.terraform*
+terraform.*

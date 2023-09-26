@@ -71,7 +71,7 @@ resource "aws_security_group" "sg_gh" {
    }
 }
 
-resource "aws_instance" "gw" {
+resource "aws_instance" "ec2_gw" {
     ami = data.aws_ami.latest_ubuntu.id
     instance_type = local.gw_instance_type
     key_name = "cdjkeeaws"
@@ -82,11 +82,43 @@ resource "aws_instance" "gw" {
     # tags = merge(local.common_tags,{name = "gw"})
 }
 
-resource "aws_instance" "gh" {
+resource "aws_instance" "ec2_gh" {
     ami = data.aws_ami.latest_ubuntu.id
     instance_type = local.gh_instance_type
     key_name = "cdjkeeaws"
     tags = {
         name = "${local.nameprefix}ec2_gh"
     }
+}
+
+resource "aws_eip" "eip_gw" {
+  instance = aws_instance.ec2_gw.id
+  tags = {
+      name = "${local.nameprefix}eip_gw"
+  }
+}
+
+#Role related
+#All the names with prefix to ensure uniqueness
+resource "aws_iam_instance_profile" "profile_gh" {
+  name = "${local.nameprefix}profile_gh"
+  role = "${aws_iam_role.role_s3readonly.name}"
+}
+
+resource "aws_iam_role" "role_s3readonly" {
+  name = "${local.nameprefix}role_s3readonly"
+  description = "S3 readonly for a single bucket with valheim worlds"
+
+  assume_role_policy = file("files/assume_role_policy.json")
+
+  tags = {
+    name = "${local.nameprefix}role_s3readonly"
+  }
+}
+
+resource "aws_iam_role_policy" "policy_s3readonly" {
+  name = "${local.nameprefix}policy_s3readonly"
+  role = "${aws_iam_role.role_s3readonly.id}"
+  #TODO: make an actual template and fill the name of S3 bucket
+  policy =  templatefile("templates/s3_readonly_policy.json.tmpl", {"test"="test"})
 }
