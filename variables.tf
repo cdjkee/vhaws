@@ -16,7 +16,7 @@ variable "gh_instance_size" {
 }
 #gateway has not much load, so it micro anyway
 #whereas
-#gamehost in prod require the way more RAM than micro provide
+#gamehost in prod require the way more RAM than micro can provide
 locals {
   gw_instance_type = "t3.micro"
   gh_instance_type = lookup(var.gh_instance_size, var.env)

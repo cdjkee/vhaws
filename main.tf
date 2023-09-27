@@ -49,8 +49,10 @@ resource "aws_security_group" "sg_gw" {
     }
 }
 
+//all the connections initiate gh (via FRP client), so only open port required is 22 for SSH
 resource "aws_security_group" "sg_gh" {
   name = "sg_gh"
+  description = "Ports for SSH" 
   ingress {
     from_port = 22
     to_port = 22
@@ -121,4 +123,26 @@ resource "aws_iam_role_policy" "policy_s3readonly" {
   role = "${aws_iam_role.role_s3readonly.id}"
   #TODO: make an actual template and fill the name of S3 bucket
   policy =  templatefile("templates/s3_readonly_policy.json.tmpl", {"test"="test"})
+}
+
+# Iventory generation
+data "template_file" "servers" {
+  template = file("templates/inventory.tmpl")
+  depends_on = [
+    aws_instance.ec2_gh,
+    aws_instance.ec2_gw
+    ]
+  vars = {
+    gw_ip = "${aws_instance.ec2_gw.public_ip}"
+    gh_ip = "${aws_instance.ec2_gh.public_ip}"
+  }
+}
+
+resource "null_resource" "servers" {
+  triggers = {
+    template_rendered = "${data.template_file.servers.rendered}"
+  }
+  provisioner "local-exec" {
+    command = "echo '${data.template_file.servers.rendered}' > inventory"
+  }
 }
