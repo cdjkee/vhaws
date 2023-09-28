@@ -77,6 +77,7 @@ resource "aws_instance" "ec2_gw" {
     ami = data.aws_ami.latest_ubuntu.id
     instance_type = local.gw_instance_type
     key_name = "cdjkeeaws"
+    vpc_security_group_ids = [aws_security_group.sg_gw.id]
     tags = {
         name = "${local.nameprefix}ec2_gw"
     }
@@ -88,6 +89,8 @@ resource "aws_instance" "ec2_gh" {
     ami = data.aws_ami.latest_ubuntu.id
     instance_type = local.gh_instance_type
     key_name = "cdjkeeaws"
+    vpc_security_group_ids = [aws_security_group.sg_gh.id]
+    iam_instance_profile = "${aws_iam_instance_profile.profile_gh.name}"
     tags = {
         name = "${local.nameprefix}ec2_gh"
     }

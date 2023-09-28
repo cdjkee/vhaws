@@ -1,3 +1,7 @@
+[aws]
+vhaws_gw ansible_host=${gw_ip} ansible_user=ubuntu
+vhaws_gh ansible_host=${gh_ip} ansible_user=ubuntu
+
 [vhaws]
-vhaws_gw ${gw_ip} ansible_user=ubuntu
-vhaws_gh ${gh_ip} ansible_user=ubuntu
+vhaws_gw ansible_host=${gw_ip} ansible_user=ubuntu
+vhaws_gh ansible_host=${gh_ip} ansible_user=ubuntu
