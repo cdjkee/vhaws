@@ -1,5 +1,6 @@
-*.log
-*.hcl
-.terraform*
-terraform.*
-inventory
+terraform/*.log
+terraform/*.hcl
+terraform/.terraform*
+terraform/terraform.*
+ansible/inventory
+ansible/group_vars/aws

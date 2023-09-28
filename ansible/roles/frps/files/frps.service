@@ -1,0 +1,12 @@
+[Unit]
+Description=Fast Reverse Proxy Server
+After=network.target
+
+[Service]
+ExecStart=/opt/frps/frps -c /etc/frps/frps.ini
+Type=simple
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

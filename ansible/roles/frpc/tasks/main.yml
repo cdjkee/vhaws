@@ -1,0 +1,24 @@
+---
+- name: copy executable
+  copy:
+    src: "frpc"
+    dest: "/opt/frpc/"
+    mode: 0755
+- name: copy ini
+  copy:
+    src: "frpc.ini"
+    dest: "/etc/frpc/"
+    mode: 0555
+- name: copy unit
+  copy:
+    src: "frpc.service"
+    dest: "/etc/systemd/system/"
+    mode: 0555
+- name: configure frpc service
+  systemd:
+    name: frpc
+    daemon_reload: true
+    state: started
+    enabled: true
+
+...

@@ -1,0 +1,24 @@
+---
+- name: copy executable
+  copy:
+    src: "frps"
+    dest: "/opt/frps/"
+    mode: 0755
+- name: copy ini
+  copy:
+    src: "frps.ini"
+    dest: "/etc/frps/"
+    mode: 0666
+- name: copy unit
+  copy:
+    src: "frps.service"
+    dest: "/etc/systemd/system/"
+    mode: 0666
+- name: configure frps service
+  systemd:
+    name: frps
+    daemon_reload: true
+    state: started
+    enabled: true
+
+...

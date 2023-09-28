@@ -1,0 +1,11 @@
+---
+- name: install FastReverseProxyServer
+  hosts: vhaws_gw
+  become: yes
+  tasks:
+    - name: include install frp role
+      include_role:
+        name: frps
+
+...
+

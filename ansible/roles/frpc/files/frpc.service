@@ -1,0 +1,12 @@
+[Unit]
+Description=Fast Reverse Proxy Client
+After=network.target
+
+[Service]
+ExecStart=/opt/frpc/frpc -c /etc/frpc/frpc.ini
+Type=simple
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
