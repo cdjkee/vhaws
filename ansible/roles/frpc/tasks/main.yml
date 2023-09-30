@@ -4,16 +4,16 @@
     src: "frpc"
     dest: "/opt/frpc/"
     mode: 0755
-- name: copy ini
-  copy:
-    src: "frpc.ini"
-    dest: "/etc/frpc/"
-    mode: 0555
+- name: Generate "frpc.ini"
+  template: 
+    src: "templates/frpc.ini.j2"
+    dest: "/etc/frpc/frpc.ini"
+    mode: 0666
 - name: copy unit
   copy:
     src: "frpc.service"
     dest: "/etc/systemd/system/"
-    mode: 0555
+    mode: 0666
 - name: configure frpc service
   systemd:
     name: frpc

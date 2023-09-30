@@ -1,0 +1,19 @@
+---
+- name: install FastReverseProxyServer
+  hosts: vhaws_gw
+  become: yes
+  tasks:
+    - name: include install frp role
+      include_role:
+        name: frps
+
+- name: install FastReverseProxyClient
+#current ini file is for Valheim Dedicated server
+  hosts: vhaws_gh
+  become: yes
+  tasks:
+    - name: include install frp role
+      include_role:
+        name: frpc
+...
+
