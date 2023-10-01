@@ -1,4 +1,9 @@
 ---
+- name: Create a directory /etc/frpc for .ini
+  ansible.builtin.file:
+    path: /etc/frpc
+    state: directory
+    mode: '0755'
 - name: copy executable
   copy:
     src: "frpc"

@@ -3,17 +3,21 @@
   hosts: vhaws_gw
   become: yes
   tasks:
-    - name: include install frp role
+    - name: include install frp server role
       include_role:
         name: frps
 
 - name: install FastReverseProxyClient
 #current ini file is for Valheim Dedicated server
   hosts: vhaws_gh
+  roles:
+    - frpc
+    - ansible-role-steamcmd
   become: yes
-  tasks:
-    - name: include install frp role
-      include_role:
-        name: frpc
+  # tasks:
+  #   - name: include install frp client role
+  #     include_role:
+  #       name: frpc
+  
 ...
 

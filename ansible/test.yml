@@ -1,0 +1,10 @@
+---
+- name: install FastReverseProxyClient
+#current ini file is for Valheim Dedicated server
+  hosts: vhaws_gh
+  roles:
+    - ansible-role-steamcmd
+  become: yes
+  
+...
+
