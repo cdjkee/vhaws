@@ -7,17 +7,20 @@
       include_role:
         name: frps
 
-- name: install FastReverseProxyClient
+- name: install FastReverseProxyClient, SteamCMD and Valheim server
 #current ini file is for Valheim Dedicated server
   hosts: vhaws_gh
   roles:
     - frpc
     - ansible-role-steamcmd
   become: yes
-  # tasks:
-  #   - name: include install frp client role
-  #     include_role:
-  #       name: frpc
+  tasks:
+    # - name: include ansible-role-steamcmd
+    #   ansible.builtin.include_role:
+    #     name: ansible-role-steamcmd
+
+    - name: Install valheim server
+      shell: "/usr/games/steamcmd +@sSteamCmdForcePlatformType linux +force_install_dir /home/{{ steamcmd_account_name }}/valheim-server +login anonymous +app_update 896660 -beta none validate +quit"
   
 ...
 

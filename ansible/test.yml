@@ -5,6 +5,6 @@
   roles:
     - ansible-role-steamcmd
   become: yes
-  
+
 ...
 
