@@ -4,3 +4,5 @@ terraform/.terraform*
 terraform/terraform.*
 ansible/inventory
 ansible/group_vars/aws
+status_cache
+

@@ -66,7 +66,7 @@ resource "aws_security_group" "sg_gh" {
     cidr_blocks = ["0.0.0.0/0"]
    }
    tags = {
-     name = "${local.nameprefix}sg_gh"
+     Name = "${local.nameprefix}sg_gh"
    }
    lifecycle {
      create_before_destroy = true
@@ -79,7 +79,7 @@ resource "aws_instance" "ec2_gw" {
     key_name = "cdjkeeaws"
     vpc_security_group_ids = [aws_security_group.sg_gw.id]
     tags = {
-        name = "${local.nameprefix}ec2_gw"
+        Name = "${local.nameprefix}ec2_gw"
     }
 
     # tags = merge(local.common_tags,{name = "gw"})
@@ -92,14 +92,14 @@ resource "aws_instance" "ec2_gh" {
     vpc_security_group_ids = [aws_security_group.sg_gh.id]
     iam_instance_profile = "${aws_iam_instance_profile.profile_gh.name}"
     tags = {
-        name = "${local.nameprefix}ec2_gh"
+        Name = "${local.nameprefix}ec2_gh"
     }
 }
 
 resource "aws_eip" "eip_gw" {
   instance = aws_instance.ec2_gw.id
   tags = {
-      name = "${local.nameprefix}eip_gw"
+      Name = "${local.nameprefix}eip_gw"
   }
 }
 
@@ -117,7 +117,7 @@ resource "aws_iam_role" "role_s3readonly" {
   assume_role_policy = file("files/assume_role_policy.json")
 
   tags = {
-    name = "${local.nameprefix}role_s3readonly"
+    Name = "${local.nameprefix}role_s3readonly"
   }
 }
 
@@ -133,10 +133,11 @@ data "template_file" "servers" {
   template = file("templates/inventory.tmpl")
   depends_on = [
     aws_instance.ec2_gh,
-    aws_instance.ec2_gw
+    aws_instance.ec2_gw,
+    aws_eip.eip_gw
     ]
   vars = {
-    gw_ip = "${aws_instance.ec2_gw.public_ip}"
+    gw_ip = "${aws_eip.eip_gw.public_ip}"
     gh_ip = "${aws_instance.ec2_gh.public_ip}"
   }
 }

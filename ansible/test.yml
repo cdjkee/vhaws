@@ -1,10 +1,21 @@
 ---
-- name: install FastReverseProxyClient
+- name: TEST
 #current ini file is for Valheim Dedicated server
   hosts: vhaws_gh
-  roles:
-    - ansible-role-steamcmd
+  vars:
+    steamcmd_account_name: "steam"
+  # roles:
+  #   - ansible-role-steamcmd
   become: yes
+  tasks:
 
+    - name: make folder structure for worlds files
+      file:
+        path: "/home/{{ steamcmd_account_name }}/.config/unity3d/IronGate/Valheim/worlds_local"
+        state: directory
+        owner: "{{ steamcmd_account_name }}"
+        group: "{{ steamcmd_account_name }}"
+        mode: 0754
+        
 ...
 
