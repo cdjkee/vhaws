@@ -3,19 +3,6 @@
 import logging
 from typing import Dict
 
-# from telegram import __version__ as TG_VER
-
-# try:
-#     from telegram import __version_info__
-# except ImportError:
-#     __version_info__ = (0, 0, 0, 0, 0)  # type: ignore[assignment]
-
-# if __version_info__ < (20, 0, 0, "alpha", 1):
-#     raise RuntimeError(
-#         f"This example is not compatible with your current PTB version {TG_VER}. To view the "
-#         f"{TG_VER} version of this example, "
-#         f"visit https://docs.python-telegram-bot.org/en/v{TG_VER}/examples.html"
-#     )
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
@@ -35,9 +22,10 @@ import signal
 import aiofiles 
 import asyncio
 import os
+import asyncio, asyncssh, sys
 from functools import wraps
 
-from config import valheimlog, server_proc_name, server_base_dir
+from config import valheimlog, server_proc_name, server_base_dir, ghaddress, ghusername
 
 # Enable logging
 logging.basicConfig(
@@ -45,15 +33,18 @@ logging.basicConfig(
 )
 # set higher logging level for httpx to avoid all GET and POST requests being logged
 logging.getLogger("httpx").setLevel(logging.WARNING)
-
+logging.getLogger("asyncssh").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 threads=[]
-online=[]
-status='Stopped'
+online=[]           #list of players steamids
+#status='Stopped'
+notifylist=[]       #list of userids to notify aout server events.
 kbdConfirm = [
         [InlineKeyboardButton(text="kill",callback_data="kill")]
     ]
 kbd = [
+        [InlineKeyboardButton(text="Run Host",callback_data="RunHost")],
+        [InlineKeyboardButton(text="Stop Host",callback_data="StopHost")],
         [InlineKeyboardButton(text="Run Modded",callback_data="RunModded")],
         [InlineKeyboardButton(text="Run Vanilla",callback_data="RunVanilla")],
         [InlineKeyboardButton(text="Status",callback_data="Status")],
@@ -71,10 +62,7 @@ KbdConfirmMarkupInline = InlineKeyboardMarkup(kbdConfirm)
 ControlPanelMarkupReply = ReplyKeyboardMarkup(kbd)
 ControlPanelMarkupReplyDesktop = ReplyKeyboardMarkup(kbdDesktop)
 
-# serverprocess_task = asyncio.create_task(asyncio.create_subprocess_exec("echo", "init"))
-# serverprocess = await serverprocess_task
-#serverprocess = await asyncio.create_subprocess_exec("echo", "init")
-TOKEN:Final = os.environ.get('TOKEN')
+TOKEN:Final = os.environ.get('TOKENTG')
 ADMINIDS:Final = os.environ.get('ADMINIDS')
 
 print(f'TOKEN={TOKEN} and ADMINIDS={ADMINIDS}')
@@ -94,14 +82,10 @@ def restricted(func):
         return await func(update, context, *args, **kwargs)
     return wrapped
 
-#get process PID by name 
-# for Valheim default is "./valheim_server.x86_64" 
-def find_server_process(procname)->psutil.Process:
-    processes = psutil.process_iter()
-    for process in processes:
-        if procname in process.cmdline():
-            return(process.pid)
-    return 0
+#asyncssh connection
+async def connect_ssh():
+    connection = await asyncssh.connect(ghaddress, known_hosts=None, username=ghusername, client_keys=['/home/cdjkee/.ssh/id_rsa'])
+    return connection
 
 #GENERAL COMMAND HANDLERS
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -111,10 +95,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(reply_text,reply_markup=ControlPanelMarkupReply)  
     
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # context.user_data.clear()
-    # current_jobs = context.job_queue.get_jobs_by_name(context._user_id)
-    # for job in current_jobs:
-    #     job.schedule_removal()
     await update.message.reply_text('Control panel removed\n/start to get it again.',reply_markup=ReplyKeyboardRemove())
     
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -158,86 +138,95 @@ async def request_server_stop(update: Update, context: ContextTypes.DEFAULT_TYPE
     answers={
         0:'Shutdown process initiated',
         1:'Server has already stopped',
-        2:'The server shutdown has already been initiated'
+        2:'Server stop error'
     }
-    # await context.bot.send_message(chat_id = context._user_id, text="Let's stop the server")
     result=answers.get(await server_stop())
     await context.bot.send_message(chat_id = context._user_id, text=result)
 
 async def server_stop() -> int:
-    global status
-    #global serverprocess
-    if status == 'Stopping':
-        print('The server shutdown has already been initiated. Please wait.')
-        return 2
-    
-    if(serverprocess):
-        # Gracefully stop valheim server
-        status = 'Stopping'
-        print(f"Servers's PID is {serverprocess.pid}")
-        serverprocess.terminate()
-        return 0
-    else:
-        print('Server has already stopped')
-        return 1
+        status =  await server_status()
+        if (status == "0"):
+            print ("Server is stopped. PID = 0")
+            return 1
+        conn = await connect_ssh()
+        result = await conn.run("kill $(ps -d | grep MainValheimThre | awk '{print $1}')", check=True)
+        if not (result.stdout):
+            return 0
+        else:
+            return 2
     
 @restricted
 async def request_server_run(update: Update, context: ContextTypes.DEFAULT_TYPE, mode='vanilla') -> int:
     answers={
         0:f'{mode} server starting process initiated',
         1:f'{mode} server is running',
-        2:f'{mode} server start has already been initiated'
+        2:f'{mode} server start error'
     }
     # await context.bot.send_message(chat_id = context._user_id, text="Let's start the server")
     result=answers.get(await server_run(mode))
     await context.bot.send_message(chat_id = context._user_id, text=result)
 
 async def server_run(mode) -> int:
-    global status
-    global serverprocess
-    print('Try to start vanilla server')
-    if(find_server_process(server_proc_name)):
-        print('Server running')
-        return 1
-    else:
-        # starting server from it's working directory and change it back to bot current working directory afterwards
-        print('Trying to start vanilla server')
-        cwd = os.getcwd()
-        os.chdir(server_base_dir)
-        if(mode =='vanilla'):
-            serverprocess = await asyncio.create_subprocess_exec("bash","/valheimds/run-vanilla.sh")
+        status =  await server_status()
+        if not (status == "0"):
+            print (f"Server is running. PID {status}")
+            return 1
+        conn = await connect_ssh()
+        result = await conn.run(f'cd {server_base_dir};nohup ./start-test.sh > server.log 2>err.log &', check=True)
+        if (not result.stdout):
+            return 0
         else:
-            serverprocess = await asyncio.create_subprocess_exec("bash","/valheimds/run-modded.sh")
-        print(f'{mode} server start initiated')
-        os.chdir(cwd)
-        status = 'Starting'
-        return 0
+            return 2
+
+@restricted
+async def request_host_run(update: Update, context: ContextTypes.DEFAULT_TYPE, mode='vanilla') -> int:
+    answers={
+        0:f'{mode} server starting process initiated',
+        1:f'{mode} server is running',
+        2:f'{mode} server start error'
+    }
+    result=answers.get(await host_run(mode))
+    await context.bot.send_message(chat_id = context._user_id, text=result)
+
+async def host_run(mode) -> int:
+    pass
+
+
+@restricted
+async def request_host_stop(update: Update, context: ContextTypes.DEFAULT_TYPE, mode='vanilla') -> int:
+    answers={
+        0:f'{mode} server starting process initiated',
+        1:f'{mode} server is running',
+        2:f'{mode} server start error'
+    }
+    result=answers.get(await host_stop(mode))
+    await context.bot.send_message(chat_id = context._user_id, text=result)
+
+async def host_stop(mode) -> int:
+    pass
+
+async def server_status() -> str:
+    conn = await connect_ssh()
+    result = await conn.run("ps -d | grep MainValheimThre | awk '{print $1}'", check=True)
+
+    if (result.stdout):
+        return result.stdout
+    else:
+        return "0"
+
 
 async def request_server_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await context.bot.send_message(chat_id = context._user_id, text=server_status())
-    # await context.bot.send_message(chat_id = context._user_id, text=server_status_tmp())
+    await context.bot.send_message(chat_id = context._user_id, text=await server_status())
+    
 
-# def server_status() -> str:
-#     return(f"Server status:{status}\nServer process PID {find_server_process(server_proc_name)}")
-
-def server_status() -> str:
-    result = f"Server status: {status}\n"
-    if('serverprocess' in globals()):
-        result += f"Server is runiing with PID {serverprocess.pid}"
-        findprocess = find_server_process(server_proc_name)
-        if(findprocess != serverprocess.pid):
-            result+=f"\nThere is valheim process running with PID {findprocess}"
-    else:
-        result += "The server has not started yet"
-
-    return result
+########################################
 
 async def request_server_online(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await context.bot.send_message(chat_id = context._user_id, text=server_online())
 
 def server_online() -> str:
     #TODO: list online players with names
-    return(f"Status: {status}\nOnline: {len(online)} people")
+    return(f"{len(online)} player(s)")
 
 #function sends a message with kill button (callback server_kill). Message will dissapear in 5 seconds.
 @restricted
@@ -254,33 +243,6 @@ async def request_server_kill(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def delete_message(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
     await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
-
-#finds and kills valheim process
-async def server_kill(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    global status
-    global serverprocess
-    pid = find_server_process(server_proc_name)
-    if(pid):
-        # Forced stop of the valheim server
-        status = 'Killing'
-        print(f"Servers's PID is {pid}. Killing")
-        await context.bot.send_message(chat_id=context._user_id, text=f"Servers's PID is {pid}. Terminating")
-        psutil.Process(pid).send_signal(signal.SIGKILL)
-        #serverprocess.kill()
-        if(find_server_process(server_proc_name)):
-            print("Server process still alive, let's wait.")
-            status = 'Killing'
-        else:
-            print("Server process killed")
-            status = 'Stopped'
-        return 0
-    else:
-        print("Server's process wasn't found")
-        status = 'Stopped'
-        await context.bot.send_message(chat_id=context._user_id, text="Server's process wasn't found")
-        return 1
 
 async def process_control_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     command = update.message.text
@@ -303,29 +265,17 @@ async def process_control_panel(update: Update, context: ContextTypes.DEFAULT_TY
         await request_server_online(update, context)
     if command == 'Button':
         await request_server_online(update, context)
-    
-async def keep_reading_logfile():    
-    while True:
-        await parse_server_output()
 
-async def parse_server_output():
-    global status
-    global online
-    # print('in log parser func')
-    fsize = os.path.getsize(valheimlog)
-    async with aiofiles.open(valheimlog, mode='rb') as f:
-        print(f'open file {valheimlog}')
-        while True:
-            await asyncio.sleep(0)
-            line = await f.readline()
+async def log_process() -> None:
+    conn = await connect_ssh()
+    async with conn.create_process(f'tail -f -n +1 {valheimlog}') as proc:
+        async for line in proc.stdout:
+            # print(f"{line}",end='')
             if(not line):
-                #print('wait')
+            #print('wait')
                 await asyncio.sleep(0.1)
-                if fsize > os.path.getsize(valheimlog):
-                    print('Reopening file')
-                    break
             else:
-                line = str(line)
+                # line = str(line)
                 # print(line)
                 if 'Got handshake from client' in line:
                     steamid = line.split()[-1]
@@ -338,21 +288,22 @@ async def parse_server_output():
                         online.remove(steamid)
                         print(f'USER DISCONNECTED {steamid}')
                 if 'Shuting down' in line:
-                    status = 'Stopping'
+                    # status = 'Stopping'
                     print(f'SERVER STARTED SHUT DOWN AT {line.split(" ",2)[1]}')
                 if 'Net scene destroyed' in line:
-                    status = 'Stopped'
+                    # status = 'Stopped'
                     online.clear()
                     print(f'SERVER SHUT DOWN COMPLETELY AT {line.split(" ",2)[1]}')
                 if 'Mono config path' in line:
-                    status = 'Starting'
+                    # status = 'Starting'
                     print(f'SERVER STARTING')
                 if 'Game server connected failed' in line:
-                    status = 'Starting'
+                    # status = 'Starting'
                     print(f'STARTING ERROR')
-                if 'Game server connected\\n' in line:
-                    status = 'Online'
+                if 'Game server connected\n' in line:
+                    # status = 'Online'
                     print(f'SERVER ONLINE')
+    
 
 async def main():
     #Application setup
@@ -364,11 +315,6 @@ async def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, help))
 
     #callbackquery handlers
-    #kill button handler
-    handler = CallbackQueryHandler(server_kill, pattern="^kill$")
-    application.add_handler(handler)
-
-    # application.add_handler(CallbackQueryHandler(process_control_panel))
 
     #General purpose commands
     handler = CommandHandler("start", start)
@@ -381,6 +327,7 @@ async def main():
     application.add_handler(handler)
     handler = CommandHandler("sw_layout", switch_layout)
     application.add_handler(handler)
+
     #Valheim server coomands
     handler = CommandHandler("status", request_server_status)
     application.add_handler(handler)
@@ -392,7 +339,11 @@ async def main():
     application.add_handler(handler)
     handler = CommandHandler("online", request_server_online)
     application.add_handler(handler)
-    handler = CommandHandler("kill", request_server_kill)
+
+    #AWS host commands
+    handler = CommandHandler("stophost", request_host_stop)
+    application.add_handler(handler)
+    handler = CommandHandler("runhost", request_host_run)
     application.add_handler(handler)
 
 
@@ -404,7 +355,8 @@ async def main():
         print('----3-----')
         await application.updater.start_polling()
         print('----4-----')
-        await keep_reading_logfile()
+        # await keep_reading_logfile()
+        await log_process()
         print('----5-----')
         await application.updater.stop()
         print('----6-----')
