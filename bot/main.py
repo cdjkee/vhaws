@@ -16,16 +16,12 @@ from telegram.ext import (
 from telegram.constants import ParseMode
 from typing import Final
 from functools import partial
-import psutil
-import subprocess
-import signal
-import aiofiles 
 import asyncio
 import os
-import asyncio, asyncssh, sys
+import asyncssh
 from functools import wraps
 
-from config import valheimlog, server_proc_name, server_base_dir, ghaddress, ghusername
+from config import valheimlog, server_base_dir, ghaddress, ghusername, ssh_keys
 
 # Enable logging
 logging.basicConfig(
@@ -53,6 +49,7 @@ kbd = [
         [InlineKeyboardButton(text="Button",callback_data="Button")]
     ]
 kbdDesktop = [
+        [InlineKeyboardButton(text="Run Host",callback_data="RunHost"),InlineKeyboardButton(text="Stop Host",callback_data="StopHost")],
         [InlineKeyboardButton(text="Run Modded",callback_data="RunModded"),InlineKeyboardButton(text="Run Vanilla",callback_data="RunVanilla")],
         [InlineKeyboardButton(text="Status",callback_data="Status"),InlineKeyboardButton(text="Online",callback_data="Online")],
         [InlineKeyboardButton(text="Stop",callback_data="Stop")],
@@ -84,8 +81,12 @@ def restricted(func):
 
 #asyncssh connection
 async def connect_ssh():
-    connection = await asyncssh.connect(ghaddress, known_hosts=None, username=ghusername, client_keys=['/home/cdjkee/.ssh/id_rsa'])
-    return connection
+    try:
+        connection = await asyncssh.connect(ghaddress, known_hosts=None, username=ghusername, client_keys=ssh_keys)
+        return connection
+    except Exception as exc:
+        print(f"SSH connection error: {exc}")
+        return None
 
 #GENERAL COMMAND HANDLERS
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -172,7 +173,7 @@ async def server_run(mode) -> int:
             print (f"Server is running. PID {status}")
             return 1
         conn = await connect_ssh()
-        result = await conn.run(f'cd {server_base_dir};nohup ./start-test.sh > server.log 2>err.log &', check=True)
+        result = await conn.run(f'cd {server_base_dir};nohup ./vhfrp_start_server.sh > server.log 2>err.log &', check=True)
         if (not result.stdout):
             return 0
         else:
@@ -185,33 +186,45 @@ async def request_host_run(update: Update, context: ContextTypes.DEFAULT_TYPE, m
         1:f'{mode} server is running',
         2:f'{mode} server start error'
     }
+    print ("request_host_run")
     result=answers.get(await host_run(mode))
     await context.bot.send_message(chat_id = context._user_id, text=result)
 
 async def host_run(mode) -> int:
-    pass
-
+    print ("host_run")
+    awscmd = ["aws","lambda", "invoke", "--function-name=lambda-start", "lambda-start-out.txt"]
+    awslambda = await asyncio.create_subprocess_exec(*awscmd)
+    print (awslambda.stdout)
+    return 0
 
 @restricted
 async def request_host_stop(update: Update, context: ContextTypes.DEFAULT_TYPE, mode='vanilla') -> int:
     answers={
-        0:f'{mode} server starting process initiated',
+        0:f'{mode} host shutdown process initiated',
         1:f'{mode} server is running',
         2:f'{mode} server start error'
     }
+    print ("request_host_stop")
     result=answers.get(await host_stop(mode))
     await context.bot.send_message(chat_id = context._user_id, text=result)
 
 async def host_stop(mode) -> int:
-    pass
-
+    print ("host_stop")
+    awscmd = ["aws","lambda", "invoke", "--function-name=lambda-stop", "lambda-stop-out.txt"]
+    awslambda = await asyncio.create_subprocess_exec(*awscmd)
+    print (awslambda.stdout)
+    return 0
 async def server_status() -> str:
+    print("server status")
     conn = await connect_ssh()
+    print("connection established")
     result = await conn.run("ps -d | grep MainValheimThre | awk '{print $1}'", check=True)
 
     if (result.stdout):
+        print("server status done ok")
         return result.stdout
     else:
+        print("server status 0")
         return "0"
 
 
@@ -249,8 +262,13 @@ async def process_control_panel(update: Update, context: ContextTypes.DEFAULT_TY
     # await query.answer()
     # await context.bot.send_message(chat_id = context._user_id, text=f'Processing command {query.data}')
     if command == 'Status':
-        #await context.bot.send_message(chat_id = context._user_id, text=request_server_status())
         await request_server_status(update, context)
+    if command == 'Run Host':
+        print ("command run host")
+        await request_host_run(update, context, mode = 'modded')
+    if command == 'Stop Host':
+        print ("command stop host")
+        await request_host_stop(update, context, mode = 'vanilla')
     if command == 'Run Modded':
         # await context.bot.send_message(chat_id = context._user_id, text=request_server_run(update, context))
         await request_server_run(update, context, mode = 'modded')
@@ -267,43 +285,101 @@ async def process_control_panel(update: Update, context: ContextTypes.DEFAULT_TY
         await request_server_online(update, context)
 
 async def log_process() -> None:
-    conn = await connect_ssh()
-    async with conn.create_process(f'tail -f -n +1 {valheimlog}') as proc:
-        async for line in proc.stdout:
-            # print(f"{line}",end='')
-            if(not line):
-            #print('wait')
-                await asyncio.sleep(0.1)
-            else:
-                # line = str(line)
-                # print(line)
-                if 'Got handshake from client' in line:
-                    steamid = line.split()[-1]
-                    if steamid not in online:
-                        online.append(steamid)
-                        print(f'CONNECTION DETECTED {steamid}')
-                if 'Closing socket' in line:
-                    steamid = line.split()[-1]
-                    if steamid in online:
-                        online.remove(steamid)
-                        print(f'USER DISCONNECTED {steamid}')
-                if 'Shuting down' in line:
-                    # status = 'Stopping'
-                    print(f'SERVER STARTED SHUT DOWN AT {line.split(" ",2)[1]}')
-                if 'Net scene destroyed' in line:
-                    # status = 'Stopped'
-                    online.clear()
-                    print(f'SERVER SHUT DOWN COMPLETELY AT {line.split(" ",2)[1]}')
-                if 'Mono config path' in line:
-                    # status = 'Starting'
-                    print(f'SERVER STARTING')
-                if 'Game server connected failed' in line:
-                    # status = 'Starting'
-                    print(f'STARTING ERROR')
-                if 'Game server connected\n' in line:
-                    # status = 'Online'
-                    print(f'SERVER ONLINE')
-    
+    retry_delay=5
+    print("READING THE LOG FILE")
+    while True:
+        print("LETS TRY TO CONNECT")
+        conn = await connect_ssh()
+        print("SSH CONNECTION COMPLETE")
+        if conn:
+            try:
+                async with await conn.create_process(f'tail -f -n +1 {valheimlog}') as proc:
+                    async for line in proc.stdout:
+                        # print(f"{line}",end='')
+                        if(not line):
+                        #print('wait')
+                            await asyncio.sleep(0.1)
+                        else:
+                            # line = str(line)
+                            # print(line)
+                            if 'Got handshake from client' in line:
+                                steamid = line.split()[-1]
+                                if steamid not in online:
+                                    online.append(steamid)
+                                    print(f'CONNECTION DETECTED {steamid}')
+                            if 'Closing socket' in line:
+                                steamid = line.split()[-1]
+                                if steamid in online:
+                                    online.remove(steamid)
+                                    print(f'USER DISCONNECTED {steamid}')
+                            if 'Shuting down' in line:
+                                # status = 'Stopping'
+                                print(f'SERVER STARTED SHUT DOWN AT {line.split(" ",2)[1]}')
+                            if 'Net scene destroyed' in line:
+                                # status = 'Stopped'
+                                online.clear()
+                                print(f'SERVER SHUT DOWN COMPLETELY AT {line.split(" ",2)[1]}')
+                            if 'Mono config path' in line:
+                                # status = 'Starting'
+                                print(f'SERVER STARTING')
+                            if 'Game server connected failed' in line:
+                                # status = 'Starting'
+                                print(f'STARTING ERROR')
+                            if 'Game server connected\n' in line:
+                                # status = 'Online'
+                                print(f'SERVER ONLINE')
+            except (OSError, asyncssh.Error) as exc:
+                print(f"Error reading remote file: {exc}")
+            print ("CLOSING THE CONNECTION conn")
+            # await conn.close()
+        else:
+            print("Failed to establish SSH connection.")
+
+        print(f"Failed to connect. Retrying in {retry_delay} seconds...")
+        await asyncio.sleep(retry_delay)
+
+    # if conn:
+    #     try:
+    #         async with await conn.create_process(f'tail -f -n +1 {valheimlog}') as proc:
+    #             async for line in proc.stdout:
+    #                 # print(f"{line}",end='')
+    #                 if(not line):
+    #                 #print('wait')
+    #                     await asyncio.sleep(0.1)
+    #                 else:
+    #                     # line = str(line)
+    #                     # print(line)
+    #                     if 'Got handshake from client' in line:
+    #                         steamid = line.split()[-1]
+    #                         if steamid not in online:
+    #                             online.append(steamid)
+    #                             print(f'CONNECTION DETECTED {steamid}')
+    #                     if 'Closing socket' in line:
+    #                         steamid = line.split()[-1]
+    #                         if steamid in online:
+    #                             online.remove(steamid)
+    #                             print(f'USER DISCONNECTED {steamid}')
+    #                     if 'Shuting down' in line:
+    #                         # status = 'Stopping'
+    #                         print(f'SERVER STARTED SHUT DOWN AT {line.split(" ",2)[1]}')
+    #                     if 'Net scene destroyed' in line:
+    #                         # status = 'Stopped'
+    #                         online.clear()
+    #                         print(f'SERVER SHUT DOWN COMPLETELY AT {line.split(" ",2)[1]}')
+    #                     if 'Mono config path' in line:
+    #                         # status = 'Starting'
+    #                         print(f'SERVER STARTING')
+    #                     if 'Game server connected failed' in line:
+    #                         # status = 'Starting'
+    #                         print(f'STARTING ERROR')
+    #                     if 'Game server connected\n' in line:
+    #                         # status = 'Online'
+    #                         print(f'SERVER ONLINE')
+    #     except (OSError, asyncssh.Error) as exc:
+    #         print(f"Error reading remote file: {exc}")
+    #     await conn.close()
+    # else:
+    #     print("Failed to establish SSH connection.")
 
 async def main():
     #Application setup
@@ -311,7 +387,7 @@ async def main():
     persistence = PicklePersistence(filepath="status_cache")
     application = Application.builder().token(TOKEN).persistence(persistence).build()
 
-    application.add_handler(MessageHandler(filters.Regex("^(Status|Run Modded|Run Vanilla|Stop|Online|Button)$"), process_control_panel))
+    application.add_handler(MessageHandler(filters.Regex("^(Run Host|Stop Host|Status|Run Modded|Run Vanilla|Stop|Online|Button)$"), process_control_panel))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, help))
 
     #callbackquery handlers
