@@ -10,6 +10,50 @@ provider "aws" {
     }
   
 }
+module "lambda-stop" {
+  source  = "terraform-aws-modules/lambda/aws"
+  version = "6.0.1"
+
+  function_name          = "lambda-stop"
+  description            = "Stops game host by request"
+  handler                = "lambda-stop-ec2.lambda_handler"
+  runtime                = "python3.11"
+  publish                = true
+
+  source_path = "files/lambda-stop"
+  attach_policy_json = true
+  policy_json = file("files/amazon_ec2_full_policy.json")
+}
+module "lambda-start" {
+  source  = "terraform-aws-modules/lambda/aws"
+  version = "6.0.1"
+
+  function_name          = "lambda-start"
+  description            = "Starts game host by request"
+  handler                = "lambda-start-ec2.lambda_handler"
+  runtime                = "python3.11"
+  publish                = true
+
+  source_path = "files/lambda-start"
+  attach_policy_json = true
+  policy_json = file("files/amazon_ec2_full_policy.json")
+}
+
+module "lambda-status" {
+  source  = "terraform-aws-modules/lambda/aws"
+  version = "6.0.1"
+
+  function_name          = "lambda-status"
+  description            = "Starts game host by request"
+  handler                = "lambda-status-ec2.lambda_handler"
+  runtime                = "python3.11"
+  publish                = true
+
+  source_path = "files/lambda-status"
+  attach_policy_json = true
+  policy_json = file("files/amazon_ec2_full_policy.json")
+}
+
 #security group for gateway
 resource "aws_security_group" "sg_gw" {
     name = "sg_gw"
@@ -78,6 +122,8 @@ resource "aws_instance" "ec2_gw" {
     instance_type = local.gw_instance_type
     key_name = "cdjkeeaws"
     vpc_security_group_ids = [aws_security_group.sg_gw.id]
+    iam_instance_profile = "${aws_iam_instance_profile.profile_gw.name}"
+    user_data = file("files/user_data.sh")
     tags = {
         Name = "${local.nameprefix}ec2_gw"
     }
@@ -91,8 +137,10 @@ resource "aws_instance" "ec2_gh" {
     key_name = "cdjkeeaws"
     vpc_security_group_ids = [aws_security_group.sg_gh.id]
     iam_instance_profile = "${aws_iam_instance_profile.profile_gh.name}"
+    user_data = file("files/user_data.sh")
     tags = {
         Name = "${local.nameprefix}ec2_gh"
+        Ctl = "lambda"
     }
 }
 
@@ -103,29 +151,70 @@ resource "aws_eip" "eip_gw" {
   }
 }
 
+
 #Role related
 #All the names with prefix to ensure uniqueness
+
+#Role for game host
+#Game host required s3 access to store and retrieve worlds files
 resource "aws_iam_instance_profile" "profile_gh" {
   name = "${local.nameprefix}profile_gh"
   role = "${aws_iam_role.role_s3readonly.name}"
 }
-
 resource "aws_iam_role" "role_s3readonly" {
   name = "${local.nameprefix}role_s3readonly"
   description = "S3 readonly for a single bucket with valheim worlds"
-
-  assume_role_policy = file("files/assume_role_policy.json")
-
+  assume_role_policy = file("files/assume_role_policy_ec2.json")
   tags = {
     Name = "${local.nameprefix}role_s3readonly"
   }
 }
-
 resource "aws_iam_role_policy" "policy_s3readonly" {
   name = "${local.nameprefix}policy_s3readonly"
   role = "${aws_iam_role.role_s3readonly.id}"
   #TODO: make an actual template and fill the name of S3 bucket
   policy =  templatefile("templates/s3_readonly_policy.json.tmpl", {"test"="test"})
+}
+
+#Role for gateway
+#gateway hosting telegram bot requires access to Start, stop and restart game host
+resource "aws_iam_instance_profile" "profile_gw" {
+  name = "${local.nameprefix}profile_gw"
+  role = "${aws_iam_role.role_control_gh.name}"
+}
+resource "aws_iam_role" "role_control_gh" {
+  name = "${local.nameprefix}role_control_gh"
+  description = "Allow to start, stop  and restart the game host"
+  assume_role_policy = file("files/assume_role_policy_ec2.json")
+  tags = {
+    Name = "${local.nameprefix}role_control_gh"
+  }
+}
+resource "aws_iam_role_policy" "policy_control_gh" {
+  name = "${local.nameprefix}policy_control_gh"
+  role = "${aws_iam_role.role_control_gh.id}"
+  policy = templatefile("templates/control_gh_policy.json.tmpl", {gh_name = "${aws_instance.ec2_gh.tags.Name}", region = "${var.region}"})
+  
+}
+#role for lambda
+#requires access to Start, stop and restart game host
+resource "aws_iam_instance_profile" "profile_lambda" {
+  name = "${local.nameprefix}profile_lambda"
+  role = "${aws_iam_role.role_lambda_control_gh.name}"
+}
+resource "aws_iam_role" "role_lambda_control_gh" {
+  name = "${local.nameprefix}role_lambda_control_gh"
+  description = "Allow Lambda to start, stop  and restart the game host"
+  assume_role_policy = file("files/assume_role_policy_lambda.json")
+  tags = {
+    Name = "${local.nameprefix}role_lambda_control_gh"
+  }
+}
+resource "aws_iam_role_policy" "lambda_policy_control_gh" {
+  name = "${local.nameprefix}lambda_policy_control_gh"
+  role = "${aws_iam_role.role_lambda_control_gh.id}"
+  policy = templatefile("templates/lambda_control_gh_policy.json.tmpl", {gh_name = "${aws_instance.ec2_gh.tags.Name}", region = "${var.region}", accountid ="${data.aws_caller_identity.current.account_id}"})
+  
 }
 
 # Iventory generation
