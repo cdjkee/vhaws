@@ -13,37 +13,24 @@
   roles:
     - frpc
     - ansible-role-steamcmd
+    - valheim-setup
   become: yes
-  tasks:
-    # - name: include ansible-role-steamcmd
-    #   ansible.builtin.include_role:
-    #     name: ansible-role-steamcmd
 
-    - name: Install valheim server
-      shell: "/usr/games/steamcmd +@sSteamCmdForcePlatformType linux +force_install_dir /home/{{ steamcmd_account_name }}/valheim-server +login anonymous +app_update 896660 -beta none validate +quit"
+- name : setup ssh
+  hosts: vhaws
+  become: yes
+  roles:
+    - ssh-key-share
 
-    - name: Change the owner of valheim-server directory to steamcmd_account_name (steam)
-      file:
-        path: "/home/{{ steamcmd_account_name }}/valheim-server"
-        state: directory
-        owner: "{{ steamcmd_account_name }}"
-        group: "{{ steamcmd_account_name }}"
-        mode: 0754
-
-    - name: generating default run script for server
-      ansible.builtin.copy:
-        src: "/home/{{ steamcmd_account_name }}/valheim-server/start_server.sh"
-        dest: "/home/{{ steamcmd_account_name }}/valheim-server/vhfrp_start_server.sh"
-        owner: "{{ steamcmd_account_name }}"
-        group: "{{ steamcmd_account_name }}"
-    - name: make folder structure for worlds files
-      file:
-        path: "/home/{{ steamcmd_account_name }}/.config/unity3d/IronGate/Valheim/worlds_local"
-        state: directory
-        owner: "{{ steamcmd_account_name }}"
-        group: "{{ steamcmd_account_name }}"
-        mode: 0754
-
+- name: install FastReverseProxyServer
+  hosts: vhaws_gw
+  become: yes
+  roles:
+    - tgbot
+  # tasks:
+  #   - name: include install tgbot server role
+  #     include_role:
+  #       name: tgbot
 
 
   
