@@ -5,9 +5,11 @@ terraform/terraform.*
 terraform/builds*
 ansible/inventory
 ansible/group_vars/aws
+ansible/test.yml
 status_cache
 bot/__pycache__*
 bot/test.py
 buffer
-
-
+lambda-start-out.txt
+lambda-stop-out.txt
+lambda-status-out.txt
