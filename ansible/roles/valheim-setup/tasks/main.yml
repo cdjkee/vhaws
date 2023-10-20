@@ -1,0 +1,49 @@
+---
+- name: Install valheim server
+  shell: "/usr/games/steamcmd +@sSteamCmdForcePlatformType linux +force_install_dir /home/{{ steamcmd_account_name }}/valheim-server +login anonymous +app_update 896660 -beta none validate +quit"
+  become_user: steam
+
+- name: Change the owner of valheim-server directory to steamcmd_account_name (steam)
+  file:
+    path: "/home/{{ steamcmd_account_name }}/valheim-server"
+    state: directory
+    owner: "{{ steamcmd_account_name }}"
+    group: "{{ steamcmd_account_name }}"
+    mode: 0754
+
+- name: generating default run script for server
+  ansible.builtin.copy:
+    # remote_src: yes
+    # src: "/home/{{ steamcmd_account_name }}/valheim-server/start_server.sh"
+    src: run-vanilla.sh
+    dest: "/home/{{ steamcmd_account_name }}/valheim-server/vhfrp_start_server.sh"
+    owner: "{{ steamcmd_account_name }}"
+    group: "{{ steamcmd_account_name }}"
+    mode: 0775
+- name: make folder structure for worlds files
+  file:
+    path: "/home/{{ steamcmd_account_name }}/.config/unity3d/IronGate/Valheim/worlds_local"
+    state: directory
+    owner: "{{ steamcmd_account_name }}"
+    group: "{{ steamcmd_account_name }}"
+    mode: 0754
+- name: copy worlds fwl
+  ansible.builtin.copy:
+    src: "Mablivion.fwl"
+    dest: "/home/{{ steamcmd_account_name }}/.config/unity3d/IronGate/Valheim/worlds_local/Mablivion.fwl"
+    owner: "{{ steamcmd_account_name }}"
+    group: "{{ steamcmd_account_name }}"
+- name: copy worlds db
+  ansible.builtin.copy:
+    src: "Mablivion.db"
+    dest: "/home/{{ steamcmd_account_name }}/.config/unity3d/IronGate/Valheim/worlds_local/Mablivion.db"
+    owner: "{{ steamcmd_account_name }}"
+    group: "{{ steamcmd_account_name }}"
+- name: make log file
+  file:
+    path: "/home/{{ steamcmd_account_name }}/valheim-server/valheimds.log"
+    state: touch
+    mode: 0666
+    owner: "{{ steamcmd_account_name }}"
+    group: "{{ steamcmd_account_name }}"
+...
