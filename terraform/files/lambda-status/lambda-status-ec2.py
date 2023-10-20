@@ -28,9 +28,9 @@ def lambda_handler(event, context):
         #perform the shutdown
         for inst in ec2.instances.filter(InstanceIds=FilteredInstances):
             print("ipv4address:", inst.private_ip_address)
-            res =inst.private_ip_address
+            res =f"{inst.state['Name']},{inst.private_ip_address}"
         print (res)
         return res
     else:
-        print ("2 or more running instances")
-        return ("2 or more running instances")
+        print ("instance is not unique")
+        return ("Notfound", "Notfound")
