@@ -1,0 +1,58 @@
+---
+- name: Install pip 
+  apt: 
+    name: pip
+    update_cache: true
+    state: present
+- name: Create a directory /opt/tgbot for bot
+  ansible.builtin.file:
+    path: /opt/tgbot
+    state: directory
+    mode: '0755'
+- name: copy main.py, config.py
+  copy:
+    src: "{{ item }}"
+    dest: "/opt/tgbot/"
+    mode: 0755
+  with_fileglob:
+    - "main.py"
+    # - "config.py"
+    - "requirements.txt"
+
+- name: fill config.py game host local ip address
+  vars: 
+    steamcmd_account_name: steam
+  ansible.builtin.template:
+    src: config.py.j2
+    dest: /opt/tgbot/config.py
+    mode: 0755
+
+- name: Install python requirements
+  ansible.builtin.pip:
+    requirements: "/opt/tgbot/requirements.txt"
+    state: forcereinstall
+
+- name: copy unit
+  copy:
+    src: "tgbot.service"
+    dest: "/etc/systemd/system/"
+    mode: 0666
+- name: create override folder for service
+  ansible.builtin.file:
+    path: "/etc/systemd/system/tgbot.service.d"
+    state: directory
+    mode: '0755'
+- name: set override of environment variables for service
+  ansible.builtin.template:
+    src: "env.conf.j2"
+    dest: "/etc/systemd/system/tgbot.service.d/env.conf"
+    mode: '0644'
+
+- name: configure tgbot service
+  systemd:
+    name: tgbot
+    daemon_reload: true
+    state: started
+    enabled: true
+
+...

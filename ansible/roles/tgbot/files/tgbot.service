@@ -1,0 +1,12 @@
+[Unit]
+Description=Telegram Bot service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/tgbot/main.py
+Type=simple
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

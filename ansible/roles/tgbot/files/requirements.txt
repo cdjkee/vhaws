@@ -1,0 +1,7 @@
+aiofiles
+asyncssh
+psutil
+python-telegram-bot
+asyncio
+pyOpenssl
+boto3

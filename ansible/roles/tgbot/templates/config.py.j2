@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+#Config 
+
+server_proc_name = "./valheim_server.x86_64"
+server_base_dir = '/home/{{ steamcmd_account_name }}/valheim-server'
+valheimlog = f'{server_base_dir}/valheimds.log'
+#ghaddress = '172.31.43.29'
+ghaddress = "{{ hostvars['vhaws_gh']['ansible_default_ipv4']['address']}}"
+ghusername = '{{ steamcmd_account_name }}'
+ssh_keys=['~/.ssh/id_rsa']
+# client_keys=['~/.ssh/id_rsa']
+# valheimlog = '/valheimds/valheimds.log'
+# server_proc_name = "./valheim_server.x86_64"
+# server_base_dir = '/valheimds'
+# ghusername = 'steam'
