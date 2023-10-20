@@ -1,0 +1,33 @@
+---
+- name: SSH KeyGen command
+  shell: > 
+    ssh-keygen -q -b 2048 -t rsa -N "" -C "creating SSH" -f ~/.ssh/id_rsa
+    creates="~/.ssh/id_rsa"
+  # when: inventory_hostname == 'vhaws_gw'
+- name: Fetch the keyfile from one server to another
+  fetch: 
+    src: "~/.ssh/id_rsa.pub"
+    dest: "buffer/id_rsa.pub"
+    flat: yes
+  when: inventory_hostname == 'vhaws_gw'
+
+- name: make folder for ssh
+  become_user: steam
+  ansible.builtin.file:
+    path: "/home/steam/.ssh"
+    state: directory
+    mode: '0700'
+  when: inventory_hostname == 'vhaws_gh'
+- name: Copy the file from master to the destination
+  # become_user: steam
+  copy:
+    src: "buffer/id_rsa.pub"
+    dest: "/tmp/id_rsa.pub" 
+  when: inventory_hostname == 'vhaws_gh'
+
+- name: add the public key into Authorized_keys file to enable Key Auth
+  become_user: steam
+  shell: "cat /tmp/id_rsa.pub >> ~/.ssh/authorized_keys"
+  register: addtoauth
+  when: inventory_hostname == 'vhaws_gh'
+...
